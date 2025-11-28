@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>J.A.R.V.I.S. — Golden Hologram</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="left">
+      <div class="card">
+        <div class="title">SYSTEM STATUS</div>
+        <div id="assistant-status" class="status">Available...</div>
+        <div class="small" id="power">Power: 100%</div>
+      </div>
+      <div class="card">
+        <div class="title">DATA STREAM</div>
+        <pre id="data-stream">&gt; initializing...</pre>
+      </div>
+    </div>
+
+    <div id="center">
+      <div id="holo-wrap">
+        <canvas id="holo"></canvas>
+      </div>
+      <div id="controls">
+        <button id="mic-btn">🎙</button>
+        <div id="mic-label">Press to speak</div>
+      </div>
+    </div>
+
+    <div id="right">
+      <div class="card">
+        <div class="title">COMMUNICATION LOG</div>
+        <div id="comm" class="comm"></div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
