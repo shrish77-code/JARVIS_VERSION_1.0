@@ -83,6 +83,10 @@ def SetAssistantStatus(status: str):
     with _state_lock:
         _assistant_status = str(status)
     _ui_queue.put(("assistant_status", str(status)))
+    try:
+        (FILES_DIR / "Status.data").write_text(str(status), encoding="utf-8")
+    except Exception:
+        pass
 
 def GetAssistantStatus() -> str:
     with _state_lock:

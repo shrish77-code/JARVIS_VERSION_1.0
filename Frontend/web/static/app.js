@@ -1,192 +1,362 @@
-// app.js - Golden hologram + state-based animation
-const API = "/api";
-let micOn = false;
-let lastResponse = "";
-async function apiGet(path){ const r = await fetch(API+path, {cache:'no-store'}); return r.json(); }
-async function apiPost(path, data={}){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)}); return r.json(); }
+const API_BASE = '/api';
+let micActive = false;
+let lastResponseText = '';
+let lastDbText = '';
+let holoState = 'idle';
 
-async function poll(){
-  try {
-    const s = await apiGet('/state');
-    document.getElementById('assistant-status').textContent = s.assistant_status || '—';
-    document.getElementById('data-stream').textContent = s.database || '';
-    const comm = s.responses || '';
-    const commEl = document.getElementById('comm');
-    if(comm && comm !== lastResponse){
-      const ts = new Date().toLocaleTimeString();
-      commEl.innerText += `[${ts}] ${comm}\n\n`;
-      commEl.scrollTop = commEl.scrollHeight;
-      lastResponse = comm;
-    }
-    micOn = (s.mic === 'True' || s.mic === 'true');
-    updateMicUI();
-    updateHoloState(s.assistant_status, micOn);
-  } catch(e) {
-    // ignore
-  } finally {
-    setTimeout(poll, 700);
-  }
-}
-
-function updateMicUI(){
-  const btn = document.getElementById('mic-btn');
-  const label = document.getElementById('mic-label');
-  if(micOn){
-    btn.style.boxShadow = '0 18px 60px rgba(255,160,60,0.25)';
-    label.textContent = 'Listening...';
-    label.style.color = '#ffd66b';
-  } else {
-    btn.style.boxShadow = '';
-    label.textContent = 'Press to speak';
-    label.style.color = '#9bdcf6';
-  }
-}
-
-// toggle mic
-document.addEventListener('DOMContentLoaded', ()=>{
-  document.getElementById('mic-btn').addEventListener('click', async ()=>{
-    await apiPost('/toggle_mic', {});
-  });
-  poll();
-  initHologram();
+document.addEventListener('DOMContentLoaded', () => {
+    initTime();
+    initHologram();
+    initMicButton();
+    startPolling();
 });
 
-// ---------------------------
-// HOLOGRAM: Three.js golden sphere with layered rings and particles
-// ---------------------------
-let renderer, scene, camera;
-let ringGroup, particleCloud, coreSphere, sparkPoints;
-let holoState = 'Available';
-
-function initHologram(){
-  const canvas = document.getElementById('holo');
-  renderer = new THREE.WebGLRenderer({canvas:canvas, alpha:true, antialias:true});
-  renderer.setPixelRatio(window.devicePixelRatio || 1);
-  resize();
-
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / Math.max(1, canvas.clientHeight), 0.1, 1000);
-  camera.position.z = 90;
-
-  // soft ambient
-  const ambient = new THREE.AmbientLight(0xffffff, 0.04);
-  scene.add(ambient);
-
-  // layered rotating rings
-  ringGroup = new THREE.Group();
-  for(let i=0;i<5;i++){
-    const r = 18 + i*4;
-    const geom = new THREE.RingGeometry(r - 0.25, r + 0.25, 256, 1);
-    const mat = new THREE.MeshBasicMaterial({color:0xffcc66, transparent:true, opacity:0.06 + i*0.02, side:THREE.DoubleSide});
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.rotation.x = Math.PI/2;
-    mesh.rotation.z = (i%2===0?0.2:-0.15) * i;
-    ringGroup.add(mesh);
-  }
-  scene.add(ringGroup);
-
-  // inner core sphere (glowing)
-  const coreGeo = new THREE.SphereGeometry(6, 32, 16);
-  const coreMat = new THREE.MeshBasicMaterial({color:0xffb84d, transparent:true, opacity:0.12});
-  coreSphere = new THREE.Mesh(coreGeo, coreMat);
-  scene.add(coreSphere);
-
-  // particle cloud (thin lines)
-  const pCount = 1200;
-  const positions = new Float32Array(pCount * 3);
-  for(let i=0;i<pCount;i++){
-    const a = Math.random() * Math.PI * 2;
-    const r = 8 + Math.random()*30;
-    positions[i*3+0] = Math.cos(a)*r + (Math.random()-0.5)*1.2;
-    positions[i*3+1] = Math.sin(a)*r + (Math.random()-0.5)*1.2;
-    positions[i*3+2] = (Math.random()-0.5)*6;
-  }
-  const pGeom = new THREE.BufferGeometry();
-  pGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const pMat = new THREE.PointsMaterial({size:0.5, color:0xffcc66, transparent:true, opacity:0.95});
-  particleCloud = new THREE.Points(pGeom, pMat);
-  scene.add(particleCloud);
-
-  // spark lines (for thinking)
-  const sparks = new Float32Array(500 * 3);
-  for(let i=0;i<500;i++){
-    sparks[i*3+0] = (Math.random()-0.5)*40;
-    sparks[i*3+1] = (Math.random()-0.5)*40;
-    sparks[i*3+2] = (Math.random()-0.5)*10;
-  }
-  const sGeom = new THREE.BufferGeometry();
-  sGeom.setAttribute('position', new THREE.BufferAttribute(sparks, 3));
-  sparkPoints = new THREE.Points(sGeom, new THREE.PointsMaterial({size:1.2, color:0xffa84d, transparent:true, opacity:0.0}));
-  scene.add(sparkPoints);
-
-  window.addEventListener('resize', resize);
-  animate();
+function initTime() {
+    const now = new Date();
+    document.getElementById('init-time').textContent = now.toLocaleTimeString();
 }
 
-function resize(){
-  const canvas = document.getElementById('holo');
-  const w = canvas.clientWidth || canvas.width || 800;
-  const h = canvas.clientHeight || canvas.height || 600;
-  renderer.setSize(w, h, true);
-  if(camera) {
-    camera.aspect = w / Math.max(1, h);
+function initMicButton() {
+    const micBtn = document.getElementById('mic-button');
+    const micLabel = document.getElementById('mic-label');
+    const audioViz = document.getElementById('audio-visualizer');
+
+    micBtn.addEventListener('click', async () => {
+        try {
+            await fetch(`${API_BASE}/toggle_mic`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (error) {
+            console.error('Mic toggle error:', error);
+        }
+    });
+}
+
+async function startPolling() {
+    while (true) {
+        try {
+            const response = await fetch(`${API_BASE}/state`, {
+                cache: 'no-store'
+            });
+            const data = await response.json();
+
+            updateStatus(data.assistant_status || 'Available...');
+            updateMicUI(data.mic === 'True');
+            updateChat(data.responses || '');
+            updateDataStream(data.database || '');
+            updateHoloState(data.assistant_status, data.mic === 'True');
+
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+
+        await sleep(700);
+    }
+}
+
+function updateStatus(status) {
+    document.getElementById('assistant-status').textContent = status;
+}
+
+function updateMicUI(isActive) {
+    const micBtn = document.getElementById('mic-button');
+    const micLabel = document.getElementById('mic-label');
+    const audioViz = document.getElementById('audio-visualizer');
+
+    micActive = isActive;
+
+    if (isActive) {
+        micBtn.classList.add('active');
+        micLabel.textContent = 'LISTENING...';
+        audioViz.classList.add('active');
+    } else {
+        micBtn.classList.remove('active');
+        micLabel.textContent = 'PRESS TO SPEAK';
+        audioViz.classList.remove('active');
+    }
+}
+
+function updateChat(responseText) {
+    if (!responseText || responseText === lastResponseText) return;
+    lastResponseText = responseText;
+
+    const chatContainer = document.getElementById('chat-container');
+    const lines = responseText.split('\n').filter(l => l.trim());
+
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        const isUser = trimmed.includes(':') && !trimmed.startsWith('Jarvis:');
+        const parts = trimmed.split(':', 2);
+
+        if (parts.length >= 2) {
+            const sender = parts[0].trim();
+            const content = parts.slice(1).join(':').trim();
+
+            const existingMessages = Array.from(chatContainer.querySelectorAll('.message-content'));
+            const alreadyExists = existingMessages.some(msg => msg.textContent === content);
+
+            if (!alreadyExists) {
+                addChatMessage(sender, content, isUser ? 'user' : 'assistant');
+            }
+        }
+    });
+
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function updateDataStream(dbText) {
+    if (!dbText || dbText === lastDbText) return;
+    lastDbText = dbText;
+
+    const logContainer = document.getElementById('data-stream');
+    const lines = dbText.split('\n').slice(-5);
+
+    logContainer.innerHTML = '';
+
+    lines.forEach((line, index) => {
+        const div = document.createElement('div');
+        div.className = 'log-entry';
+        div.textContent = line.trim() || '> ...';
+        div.style.animationDelay = `${index * 0.1}s`;
+        logContainer.appendChild(div);
+    });
+}
+
+function addChatMessage(sender, content, type = 'system') {
+    const chatContainer = document.getElementById('chat-container');
+    const now = new Date();
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${type}`;
+
+    const header = document.createElement('div');
+    header.className = 'message-header';
+
+    const senderSpan = document.createElement('span');
+    senderSpan.className = 'message-sender';
+    senderSpan.textContent = sender.toUpperCase();
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'message-time';
+    timeSpan.textContent = now.toLocaleTimeString();
+
+    header.appendChild(senderSpan);
+    header.appendChild(timeSpan);
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.textContent = content;
+
+    messageDiv.appendChild(header);
+    messageDiv.appendChild(contentDiv);
+    chatContainer.appendChild(messageDiv);
+
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function updateHoloState(status, micOn) {
+    const statusLower = (status || '').toLowerCase();
+
+    if (statusLower.includes('listening') || micOn) {
+        holoState = 'listening';
+    } else if (statusLower.includes('thinking') || statusLower.includes('processing') || statusLower.includes('searching')) {
+        holoState = 'thinking';
+    } else if (statusLower.includes('answering') || statusLower.includes('replying')) {
+        holoState = 'answering';
+    } else {
+        holoState = 'idle';
+    }
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+let scene, camera, renderer;
+let coreParticles, orbitRings, energyField;
+let holoTime = 0;
+
+function initHologram() {
+    const canvas = document.getElementById('hologram-canvas');
+    if (!canvas) return;
+
+    scene = new THREE.Scene();
+
+    camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+    camera.position.z = 120;
+
+    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const ambientLight = new THREE.AmbientLight(0x00d9ff, 0.1);
+    scene.add(ambientLight);
+
+    const pointLight = new THREE.PointLight(0x00ffcc, 1, 100);
+    pointLight.position.set(0, 0, 50);
+    scene.add(pointLight);
+
+    createCoreParticles();
+    createOrbitRings();
+    createEnergyField();
+
+    window.addEventListener('resize', onWindowResize);
+
+    animateHologram();
+}
+
+function createCoreParticles() {
+    const particleCount = 1500;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+        const radius = Math.random() * 25 + 5;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(Math.random() * 2 - 1);
+
+        positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = radius * Math.cos(phi);
+
+        const color = new THREE.Color();
+        color.setHSL(0.5 + Math.random() * 0.1, 1, 0.7);
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+        size: 1.2,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+    });
+
+    coreParticles = new THREE.Points(geometry, material);
+    scene.add(coreParticles);
+}
+
+function createOrbitRings() {
+    orbitRings = new THREE.Group();
+
+    for (let i = 0; i < 4; i++) {
+        const radius = 30 + i * 15;
+        const geometry = new THREE.RingGeometry(radius - 0.5, radius + 0.5, 128);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00d9ff,
+            transparent: true,
+            opacity: 0.15 + i * 0.05,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending
+        });
+
+        const ring = new THREE.Mesh(geometry, material);
+        ring.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+        ring.rotation.y = (Math.random() - 0.5) * 0.3;
+
+        orbitRings.add(ring);
+    }
+
+    scene.add(orbitRings);
+}
+
+function createEnergyField() {
+    const geometry = new THREE.SphereGeometry(15, 32, 32);
+    const material = new THREE.MeshBasicMaterial({
+        color: 0x00ffcc,
+        transparent: true,
+        opacity: 0.1,
+        wireframe: true,
+        blending: THREE.AdditiveBlending
+    });
+
+    energyField = new THREE.Mesh(geometry, material);
+    scene.add(energyField);
+}
+
+function animateHologram() {
+    requestAnimationFrame(animateHologram);
+    holoTime += 0.01;
+
+    if (coreParticles) {
+        coreParticles.rotation.y += 0.001;
+        coreParticles.rotation.x += 0.0005;
+
+        const positions = coreParticles.geometry.attributes.position.array;
+        for (let i = 0; i < positions.length; i += 3) {
+            const x = positions[i];
+            const y = positions[i + 1];
+            const z = positions[i + 2];
+
+            const distance = Math.sqrt(x * x + y * y + z * z);
+            const wave = Math.sin(holoTime * 2 + distance * 0.1) * 0.5;
+
+            positions[i] += Math.sin(holoTime + i) * 0.02;
+            positions[i + 1] += Math.cos(holoTime + i) * 0.02;
+            positions[i + 2] += wave * 0.01;
+        }
+        coreParticles.geometry.attributes.position.needsUpdate = true;
+    }
+
+    if (orbitRings) {
+        orbitRings.rotation.y += 0.002;
+        orbitRings.rotation.x += 0.001;
+
+        orbitRings.children.forEach((ring, index) => {
+            ring.rotation.z += (index % 2 === 0 ? 0.003 : -0.003);
+        });
+    }
+
+    if (energyField) {
+        energyField.rotation.x += 0.003;
+        energyField.rotation.y += 0.002;
+
+        const baseScale = 1;
+        let scaleMultiplier = 1;
+        let opacityMultiplier = 1;
+
+        if (holoState === 'listening') {
+            scaleMultiplier = 1 + Math.sin(holoTime * 5) * 0.2;
+            opacityMultiplier = 1.5;
+            energyField.material.color.setHex(0x00ffcc);
+        } else if (holoState === 'thinking') {
+            scaleMultiplier = 1 + Math.sin(holoTime * 8) * 0.15;
+            opacityMultiplier = 2;
+            energyField.material.color.setHex(0x0099ff);
+            if (coreParticles) {
+                coreParticles.rotation.y += 0.005;
+            }
+        } else if (holoState === 'answering') {
+            scaleMultiplier = 1 + Math.sin(holoTime * 10) * 0.25;
+            opacityMultiplier = 2.5;
+            energyField.material.color.setHex(0x00d9ff);
+        } else {
+            scaleMultiplier = 1 + Math.sin(holoTime * 2) * 0.05;
+            opacityMultiplier = 1;
+            energyField.material.color.setHex(0x00ffcc);
+        }
+
+        energyField.scale.set(baseScale * scaleMultiplier, baseScale * scaleMultiplier, baseScale * scaleMultiplier);
+        energyField.material.opacity = 0.1 * opacityMultiplier;
+    }
+
+    renderer.render(scene, camera);
+}
+
+function onWindowResize() {
+    const canvas = document.getElementById('hologram-canvas');
+    if (!canvas) return;
+
+    camera.aspect = canvas.clientWidth / canvas.clientHeight;
     camera.updateProjectionMatrix();
-  }
-}
-
-let tStart = Date.now();
-function animate(){
-  requestAnimationFrame(animate);
-  const t = (Date.now() - tStart) / 1000;
-
-  // base subtle motion
-  ringGroup.rotation.y = Math.sin(t * 0.12) * 0.12;
-  ringGroup.rotation.x = 0.08 * Math.sin(t * 0.08);
-  particleCloud.rotation.z = -t * 0.07;
-
-  // state-driven tweaks
-  if(holoState === 'Available'){
-    coreSphere.material.opacity = 0.10;
-    particleCloud.material.opacity = 0.7;
-    sparkPoints.material.opacity = 0.0;
-    for(let i=0;i<ringGroup.children.length;i++){
-      ringGroup.children[i].material.opacity = 0.04 + i*0.01;
-    }
-  } else if(holoState === 'Listening'){
-    const pulse = 0.6 + Math.abs(Math.sin(t * 3.6)) * 1.6;
-    coreSphere.material.opacity = 0.18 + Math.abs(Math.sin(t * 2.2)) * 0.16;
-    particleCloud.material.opacity = 0.95;
-    sparkPoints.material.opacity = 0.12;
-    // ring glow stronger
-    for(let i=0;i<ringGroup.children.length;i++){
-      ringGroup.children[i].material.opacity = 0.08 + i*0.03 + Math.abs(Math.sin(t * (1.2 + i*0.1)))*0.06;
-      ringGroup.children[i].rotation.z += 0.006 * (i%2===0 ? 1 : -1);
-    }
-  } else if(holoState === 'Thinking'){
-    coreSphere.material.opacity = 0.14 + Math.abs(Math.sin(t * 6)) * 0.12;
-    particleCloud.material.opacity = 0.9;
-    sparkPoints.material.opacity = 0.45;
-    // fast rotation
-    ringGroup.rotation.y += 0.01 + 0.01 * Math.sin(t*2.2);
-    sparkPoints.rotation.y += 0.02;
-  } else if(holoState === 'Replying'){
-    const burst = 1 + Math.abs(Math.sin(t*8)) * 0.8;
-    coreSphere.material.opacity = 0.22 + Math.abs(Math.sin(t*6))*0.2;
-    particleCloud.material.opacity = 1.0;
-    sparkPoints.material.opacity = 0.32;
-    ringGroup.rotation.y += 0.015;
-    // scale core slightly
-    coreSphere.scale.set(1 + 0.06*Math.sin(t*12), 1 + 0.06*Math.cos(t*12), 1);
-  }
-
-  renderer.render(scene, camera);
-}
-
-function updateHoloState(assistantStatus, micState){
-  // Map status text to holoState
-  let s = (assistantStatus || '').toLowerCase();
-  if(s.includes('listening') || micState) holoState = 'Listening';
-  else if(s.includes('thinking') || s.includes('processing')) holoState = 'Thinking';
-  else if(s.includes('answering') || s.includes('reply')) holoState = 'Replying';
-  else holoState = 'Available';
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 }

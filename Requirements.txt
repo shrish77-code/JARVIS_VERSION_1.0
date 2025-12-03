@@ -15,3 +15,5 @@ pygame
 edge-tts
 pyQt5
 webdriver-manager
+flask
+google-generativeai

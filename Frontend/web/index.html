@@ -1,44 +1,143 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>J.A.R.V.I.S. — Golden Hologram</title>
-<link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. - AI Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div id="app">
-    <div id="left">
-      <div class="card">
-        <div class="title">SYSTEM STATUS</div>
-        <div id="assistant-status" class="status">Available...</div>
-        <div class="small" id="power">Power: 100%</div>
-      </div>
-      <div class="card">
-        <div class="title">DATA STREAM</div>
-        <pre id="data-stream">&gt; initializing...</pre>
-      </div>
+    <div class="grid-overlay"></div>
+    <div class="scan-line"></div>
+
+    <div class="container">
+        <header class="header">
+            <div class="logo-section">
+                <div class="logo-ring"></div>
+                <h1 class="logo">J.A.R.V.I.S.</h1>
+                <div class="subtitle">Just A Rather Very Intelligent System</div>
+            </div>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-label">STATUS</span>
+                    <span class="status-value" id="assistant-status">Initializing...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">SYSTEM</span>
+                    <span class="status-value">ONLINE</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">POWER</span>
+                    <span class="status-value">100%</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="panel-card">
+                    <div class="panel-title">
+                        <span class="panel-icon">◉</span>
+                        NEURAL INTERFACE
+                    </div>
+                    <div class="panel-content">
+                        <div class="neural-line" style="--delay: 0s">
+                            <span class="neural-label">VISUAL</span>
+                            <div class="neural-bar"><div class="neural-fill" style="width: 95%"></div></div>
+                            <span class="neural-value">95%</span>
+                        </div>
+                        <div class="neural-line" style="--delay: 0.1s">
+                            <span class="neural-label">AUDIO</span>
+                            <div class="neural-bar"><div class="neural-fill" style="width: 88%"></div></div>
+                            <span class="neural-value">88%</span>
+                        </div>
+                        <div class="neural-line" style="--delay: 0.2s">
+                            <span class="neural-label">PROCESSING</span>
+                            <div class="neural-bar"><div class="neural-fill" style="width: 92%"></div></div>
+                            <span class="neural-value">92%</span>
+                        </div>
+                        <div class="neural-line" style="--delay: 0.3s">
+                            <span class="neural-label">MEMORY</span>
+                            <div class="neural-bar"><div class="neural-fill" style="width: 78%"></div></div>
+                            <span class="neural-value">78%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="panel-title">
+                        <span class="panel-icon">◈</span>
+                        SYSTEM LOG
+                    </div>
+                    <div class="panel-content">
+                        <div class="log-container" id="data-stream">
+                            <div class="log-entry">&gt; Neural networks initialized</div>
+                            <div class="log-entry">&gt; Voice recognition online</div>
+                            <div class="log-entry">&gt; Awaiting input...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="center-panel">
+                <div class="hologram-container">
+                    <canvas id="hologram-canvas"></canvas>
+                    <div class="hologram-overlay">
+                        <div class="holo-ring ring-1"></div>
+                        <div class="holo-ring ring-2"></div>
+                        <div class="holo-ring ring-3"></div>
+                    </div>
+                </div>
+
+                <div class="voice-control">
+                    <button class="mic-button" id="mic-button">
+                        <div class="mic-pulse"></div>
+                        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </button>
+                    <div class="mic-label" id="mic-label">PRESS TO SPEAK</div>
+                    <div class="audio-visualizer" id="audio-visualizer">
+                        <div class="audio-bar" style="--i: 0"></div>
+                        <div class="audio-bar" style="--i: 1"></div>
+                        <div class="audio-bar" style="--i: 2"></div>
+                        <div class="audio-bar" style="--i: 3"></div>
+                        <div class="audio-bar" style="--i: 4"></div>
+                        <div class="audio-bar" style="--i: 5"></div>
+                        <div class="audio-bar" style="--i: 6"></div>
+                        <div class="audio-bar" style="--i: 7"></div>
+                        <div class="audio-bar" style="--i: 8"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="panel-card chat-panel">
+                    <div class="panel-title">
+                        <span class="panel-icon">◎</span>
+                        COMMUNICATION LOG
+                    </div>
+                    <div class="chat-container" id="chat-container">
+                        <div class="chat-message system">
+                            <div class="message-header">
+                                <span class="message-sender">SYSTEM</span>
+                                <span class="message-time" id="init-time"></span>
+                            </div>
+                            <div class="message-content">J.A.R.V.I.S. initialized and ready for commands.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div id="center">
-      <div id="holo-wrap">
-        <canvas id="holo"></canvas>
-      </div>
-      <div id="controls">
-        <button id="mic-btn">🎙</button>
-        <div id="mic-label">Press to speak</div>
-      </div>
-    </div>
-
-    <div id="right">
-      <div class="card">
-        <div class="title">COMMUNICATION LOG</div>
-        <div id="comm" class="comm"></div>
-      </div>
-    </div>
-  </div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
-<script src="/static/app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+    <script src="/static/app.js"></script>
 </body>
 </html>
